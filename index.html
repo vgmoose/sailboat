@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<link rel="stylesheet" href="css/themes/default/style.min.css">
+	<link rel="stylesheet" href="css/themes/default-dark/style.min.css">
+  <title>Wiiubru Editor</title>
+  <style type="text/css" media="screen">
+    body {
+        overflow: hidden;
+    }
+
+    #editor {
+        margin: 0;
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 300px;
+        right: 0;
+    }
+	  
+	#files {
+		margin: 0;
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 300px;
+		left: 0px;
+	}
+  </style>
+</head>
+<body>
+
+	<div class="tree" id="files">
+		<ul>
+			<li>src
+			<ul>
+				<li data-jstree='{ "selected" : true, "type" : "file"}'>main.c</li>
+				<li data-jstree='{ "selected" : false, "type" : "file"}'>main.h</li>
+			</ul></li>
+			<li data-jstree='{ "selected" : false, "type" : "file"}'>Makefile</li>
+
+		</ul></div>
+
+<pre id="editor">#include &lt;stdio.h&gt;
+
+int main()
+{
+	printf("Hello World\n");
+	return 0;
+}
+</pre>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>	<script src="src-min/jstree.min.js"></script>
+	
+<script src="src-min/ace.js" type="text/javascript" charset="utf-8"></script>
+<script>
+    var editor = ace.edit("editor");
+    editor.setTheme("ace/theme/twilight");
+    editor.session.setMode("ace/mode/c_cpp");
+		$('#files').jstree({ plugins : ["checkbox","sort","types","wholerow"], "core" : { "themes" : { "name" : "default-dark" } }, "types" : { "file" : { "icon" : "jstree-file" } } });
+
+</script>
+
+</body>
+</html>
