@@ -1,0 +1,3 @@
+Hi!
+
+Place cert.pem, privkey.pem, and chain.pem in this directory
