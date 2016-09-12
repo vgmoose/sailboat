@@ -10,10 +10,10 @@ pip install -r requirements.txt
 python server.py
 ```
 
-For configuring SSL, take a look at the app.conf file.
+For configuring SSL, take a look at the app.conf file
 
 ## Usage
-**The described functionality below is not yet complete**
+*The described functionality below is not yet complete*
 
 A user is authenticated to an editing session via a captcha code. When the code is correctly entered, they are given a cookie representing the session. The session can be used to edit up to 5MB of files, with each file less than 10KB each. The files can also be compiled into a binary to download.
 

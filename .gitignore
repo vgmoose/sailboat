@@ -1,2 +1,4 @@
 *.pem
 *.log
+*.DS_Store
+.recaptcha*
