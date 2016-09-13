@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ''' '' '' ''
 
+import datetime, os, base64
+
 # controversial imports
 try:
 	import cherrypy
@@ -25,8 +27,33 @@ except ImportError as e:
 	print "[ERROR] " + e.message
 	exit()
 	
-# cache for staticy files
+# cache for staticy files (including sessions)
 file_cache = {}
+
+def expire_if_needed(sid, expiration):
+	# if the session doesn't exist
+	if expiration == None:
+		return True
+	
+	# if the current date is past the expiration
+	if datetime.datetime.now() > datetime.datetime.fromtimestamp(expiration):
+		# remove the session by deleting the file
+		os.remove("sessions/"+sid)
+		
+		# invalidate the cache
+		del file_cache[sid]
+		
+		return True
+	
+	return False
+
+def load_session(sid):
+	# try to open an existing session for the given id
+	# (already cached from the contents method)
+	try:
+		return float(contents("sessions/"+sid))
+	except:
+		return None
 	
 def contents(filename):
 	# return from the cache if possible
@@ -54,7 +81,7 @@ except Exception as e:
 
 class Root(object):
 	@cherrypy.expose
-	def display_recaptcha(self, *args, **kwargs):
+	def auth(self, *args, **kwargs):
 		captcha_html = captcha.displayhtml(
 						   captcha_site,
 						   use_ssl=False,
@@ -93,21 +120,57 @@ class Root(object):
 			cherrypy.request.headers["Remote-Addr"],)
 
 		if response.is_valid:
+			# if the user has an existing session, we'll get and renew itt
+			if "sesh_id" in cherrypy.request.cookie:
+				sesh_id = cherrypy.request.cookie["sesh_id"]
+				expiration = load_session(sesh_id)
+				if not expire_if_needed(sesh_id, expiration):
+					# renew it
+					pass
+				
+			# generate a new session and cookie
+			expires = datetime.datetime.now() + datetime.timedelta(hours=72)
+			expires = str((expires - datetime.datetime(1970, 1, 1)).total_seconds())
+			
+			sesh_id = base64.b64encode(os.urandom(16)).replace("/", "-")
+			
+			# write the cookie to a file
+			# TODO: check for collisions
+			c = open("sessions/"+sesh_id, "w")
+			c.write(expires)
+			c.close()
+			
+			cherrypy.response.cookie["sesh_id"] = sesh_id
+			cherrypy.response.cookie["sesh_id"]["max-age"] = datetime.timedelta(hours=72).total_seconds()
+			
 			#redirect to where ever we want to go on success
-			raise cherrypy.HTTPRedirect("success_page")
+			raise cherrypy.HTTPRedirect("/")
 
 		if response.error_code:
 			# this tacks on the error to the redirect, so you can let the
 			# user knowwhy their submission failed (not handled above,
 			# but you are smart :-) )
 			raise cherrypy.HTTPRedirect(
-				"display_recaptcha?error=%s"%response.error_code)
+				"auth?error=%s"%response.error_code)
 	
 	@cherrypy.expose
-	def default(self, *args, **kwargs):
-		if len(args) == 0: # root
+	def index(self, *args, **kwargs):
+		if "sesh_id" in cherrypy.request.cookie:
+			# session id exists, make sure it's valid
+			sesh_id = cherrypy.request.cookie["sesh_id"].value
+			expiration = load_session(sesh_id)
+			if expire_if_needed(sesh_id, expiration):
+				# expire the client's cookie
+				cherrypy.response.cookie["sesh_id"] = sesh_id
+				cherrypy.response.cookie["sesh_id"]["expires"] = 0
+				raise cherrypy.HTTPRedirect("/")
+			
 			return contents("index.html")
-		return captcha_secret
+			
+		# unauthorized
+		else:
+			raise cherrypy.HTTPRedirect("/auth")
+														 
 	
 
 cherrypy.quickstart(Root(), "", "app.conf")
