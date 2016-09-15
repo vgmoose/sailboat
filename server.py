@@ -16,7 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ''' '' '' ''
 
-import datetime, os, base64
+import datetime, os, base64, shutil
 
 # controversial imports
 try:
@@ -30,6 +30,21 @@ except ImportError as e:
 # cache for staticy files (including sessions)
 file_cache = {}
 
+pwd = os.getcwd()
+
+def is_logged_in():
+	if "sesh_id" in cherrypy.request.cookie:
+		# session id exists, make sure it's valid
+		sesh_id = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
+		expiration = load_session(sesh_id)
+		if expire_if_needed(sesh_id, expiration):
+			# expire the client's cookie
+			cherrypy.response.cookie["sesh_id"] = sesh_id
+			cherrypy.response.cookie["sesh_id"]["expires"] = 0
+			raise cherrypy.HTTPRedirect("/")
+		return True
+	return False
+
 def expire_if_needed(sid, expiration):
 	# if the session doesn't exist
 	if expiration == None:
@@ -37,8 +52,8 @@ def expire_if_needed(sid, expiration):
 	
 	# if the current date is past the expiration
 	if datetime.datetime.now() > datetime.datetime.fromtimestamp(expiration):
-		# remove the session by deleting the file
-		os.remove("sessions/"+sid)
+		# remove the session by deleting the folder
+		shutil.rmtree("sessions/"+sid)
 		
 		# invalidate the cache
 		del file_cache[sid]
@@ -51,7 +66,7 @@ def load_session(sid):
 	# try to open an existing session for the given id
 	# (already cached from the contents method)
 	try:
-		return float(contents("sessions/"+sid))
+		return float(contents("sessions/"+sid+"/cookie.txt"))
 	except:
 		return None
 	
@@ -136,7 +151,9 @@ class Root(object):
 			
 			# write the cookie to a file
 			# TODO: check for collisions
-			c = open("sessions/"+sesh_id, "w")
+			homepath = "sessions/"+sesh_id
+			os.mkdir(homepath)
+			c = open(homepath+"/cookie.txt", "w")
 			c.write(expires)
 			c.close()
 			
@@ -155,22 +172,56 @@ class Root(object):
 	
 	@cherrypy.expose
 	def index(self, *args, **kwargs):
-		if "sesh_id" in cherrypy.request.cookie:
-			# session id exists, make sure it's valid
-			sesh_id = cherrypy.request.cookie["sesh_id"].value
-			expiration = load_session(sesh_id)
-			if expire_if_needed(sesh_id, expiration):
-				# expire the client's cookie
-				cherrypy.response.cookie["sesh_id"] = sesh_id
-				cherrypy.response.cookie["sesh_id"]["expires"] = 0
-				raise cherrypy.HTTPRedirect("/")
-			
+		if is_logged_in():
 			return contents("index.html")
 			
 		# unauthorized
 		else:
 			raise cherrypy.HTTPRedirect("/auth")
-														 
-	
+							
+	@cherrypy.expose
+	def files(self, *args, **kwargs):
+		if is_logged_in():
+			sid = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
+			homepath = pwd+"/"+"sessions/"+sid+"/"
+			if len(args) > 0:
+				# make sure the target path is in the home directory
+				target_path = "/".join(args)
+				target_path = os.path.abspath(homepath + target_path)
+
+				if not target_path.startswith(homepath):
+					# not allowed
+					return cherrypy.HTTPError(403)
+				
+				# only fetch .c .h .cpp .hpp and Makefile files
+				failed = True
+				lower_path = target_path.lower()
+				for ending in [".c", ".h", ".cpp", ".hpp", "makefile"]:
+					if lower_path.endswith(ending):
+						failed = False
+						break
+						
+				if failed:
+					return cherrypy.HTTPError(403)
+				
+				if cherrypy.request.method == "GET":
+					# get the target file and return it
+					t = open(target_path, "r")
+					result = t.read()
+					t.close()
+				
+					return result
+				
+				elif cherrypy.request.method == "POST":
+					# ge the target file and write the post contents to it
+					t = open(target_path, "w")
+					t.write(kwargs["data"])
+					t.close()
+					
+					return "Wrote contents of [data] to " + target_path
+					
+			# no path specified, return json overview
+			else:
+				return "TODO: json overview of files/folders"
 
 cherrypy.quickstart(Root(), "", "app.conf")
