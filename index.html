@@ -25,24 +25,11 @@
 		<button onclick="loadcontents()">Load</button>
 	</div>
 	<div class="tree" id="files">
-		<ul>
-			<li>src
-			<ul>
-				<li data-jstree='{ "selected" : true, "type" : "file"}'>main.c</li>
-				<li data-jstree='{ "selected" : false, "type" : "file"}'>main.h</li>
-			</ul></li>
-			<li data-jstree='{ "selected" : false, "type" : "file"}'>Makefile</li>
+		Loading...
+	</div>
 
-		</ul></div>
-
-<pre id="editor">#include &lt;stdio.h&gt;
-
-int main()
-{
-	printf("Hello World\n");
-	return 0;
-}
-</pre>
+	<pre class="bigpanel" id="editor" hidden></pre>
+	<div class="bigpanel" id="preloader">Load a file from the left, or clone a project from the toolbar above.</div>
 
 
 </body>

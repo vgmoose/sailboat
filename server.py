@@ -72,8 +72,8 @@ def load_session(sid):
 	
 def contents(filename):
 	# return from the cache if possible
-	if filename in file_cache:
-		return file_cache[filename]
+#	if filename in file_cache:
+#		return file_cache[filename]
 	
 	# get the contents of the file
 	c = open(filename, "r")
@@ -104,7 +104,16 @@ def get_directory_structure(rootdir):
 	start = rootdir.rfind(os.sep) + 1
 	for path, dirs, files in os.walk(rootdir):
 		folders = path[start:].split(os.sep)
-		subdir = dict.fromkeys(files)
+		valid_files = []
+		
+		for cfile in files:
+			# only use proper file endings
+			for ending in [".c", ".h", ".cpp", ".hpp", "makefile"]:
+				if cfile.endswith(ending):
+					valid_files.append(cfile)
+					continue
+
+		subdir = dict.fromkeys(valid_files)
 		parent = reduce(dict.get, folders[:-1], dir)
 		parent[folders[-1]] = subdir
 	return dir
