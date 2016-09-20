@@ -50,7 +50,19 @@ function loadcontents(filename)
 
 function make()
 {
-	alert("Will be implemented soon!");
+	alert("Compiling may take a while, Hit OK first, and then please wait.");
+	$.get("/make", function(data) {
+		alert(data);
+		refresh_files();
+	});
+}
+
+function clean()
+{
+	$.get("/clean", function(data) {
+		alert(data);
+		refresh_files();
+	});
 }
 
 function newfolder()
@@ -148,6 +160,13 @@ function onload()
 	
 	$("#files").on("select_node.jstree",
 	 function(evt, data){
+		
+		if (data.node.text.toLowerCase().endsWith(".elf"))
+		{
+			// download the elf directly
+			window.location = "/files/" + data.node.text;
+		}
+		
 		if (data.node.children.length == 0 && (!is_dir(data.node.text) || data.node.text.toLowerCase().endsWith("makefile")))
 		{
 			if (midLoad)

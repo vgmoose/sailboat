@@ -16,12 +16,13 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ''' '' '' ''
 
-import datetime, os, base64, shutil, json
+import datetime, os, base64, shutil, json, subprocess
 from distutils import dir_util
 
 # controversial imports
 try:
 	import cherrypy
+	from cherrypy.lib.static import serve_file
 	from recaptcha.client import captcha
 except ImportError as e:
 	print "[ERROR] Some dependencies are missing, try \"pip install -r requirements.txt\""
@@ -112,7 +113,7 @@ def get_directory_structure(rootdir):
 		
 		for cfile in files:
 			# only use proper file endings
-			for ending in [".c", ".h", ".cpp", ".hpp", "makefile"]:
+			for ending in [".c", ".h", ".cpp", ".hpp", "makefile", ".elf"]:
 				if cfile.lower().endswith(ending):
 					valid_files.append(cfile)
 					continue
@@ -207,6 +208,22 @@ class Root(object):
 			# but you are smart :-) )
 			raise cherrypy.HTTPRedirect(
 				"auth?error=%s"%response.error_code)
+			
+	@cherrypy.expose
+	def clean(self, *args, **kwargs):
+		# cd into the target directory
+		sesh_id = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
+		
+		output = subprocess.check_output (["make", "clean"], cwd=HOME+sesh_id, stderr=subprocess.STDOUT)
+		return output
+			
+	@cherrypy.expose
+	def make(self, *args, **kwargs):
+		# cd into the target directory
+		sesh_id = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
+		
+		output = subprocess.check_output (["make"], cwd=HOME+sesh_id, stderr=subprocess.STDOUT)
+		return output
 	
 	@cherrypy.expose
 	def index(self, *args, **kwargs):
@@ -255,7 +272,7 @@ class Root(object):
 						
 				# makefiles are allowed for getting only
 				if cherrypy.request.method == "GET":
-					if lower_path.endswith("makefile"):
+					if lower_path.endswith("makefile") or lower_path.endswith("elf"):
 						failed = False
 						
 				if failed:
@@ -271,6 +288,10 @@ class Root(object):
 					return "Created folder at " + target_path + sassMsg
 				
 				if cherrypy.request.method == "GET":
+					# if we have an elf, return it a special way so that it is downloaded
+					if target_path.lower().endswith(".elf"):
+						return serve_file(target_path, "application/x-download", "attachment")
+					
 					# get the target file and return it
 					t = open(target_path, "r")
 					result = t.read()
