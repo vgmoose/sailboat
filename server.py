@@ -159,24 +159,30 @@ class Root(object):
 			cherrypy.request.headers["Remote-Addr"],)
 
 		if response.is_valid:
+			old_sesh = None
+			
 			# if the user has an existing session, we'll get and renew itt
 			if "sesh_id" in cherrypy.request.cookie:
-				sesh_id = cherrypy.request.cookie["sesh_id"]
+				sesh_id = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
 				expiration = load_session(sesh_id)
 				if not expire_if_needed(sesh_id, expiration):
 					# renew it
-					pass
+					old_sesh = sesh_id
 				
 			# generate a new session and cookie
 			expires = datetime.datetime.now() + datetime.timedelta(hours=72)
 			expires = str((expires - datetime.datetime(1970, 1, 1)).total_seconds())
 			
-			sesh_id = base64.b64encode(os.urandom(16)).replace("/", "-")
+			# update with the old sesh or make a new one
+			sesh_id = old_sesh or base64.b64encode(os.urandom(16)).replace("/", "-")
 			
 			# write the cookie to a file
 			# TODO: check for collisions
 			homepath = "sessions/"+sesh_id
-			os.mkdir(homepath)
+			try:
+				os.mkdir(homepath)
+			except:
+				pass
 			c = open(homepath+"/cookie.txt", "w")
 			c.write(expires)
 			c.close()
@@ -202,6 +208,13 @@ class Root(object):
 		# unauthorized
 		else:
 			raise cherrypy.HTTPRedirect("/auth")
+			
+	@cherrypy.expose
+	def time(self, *args, **kwargs):
+		if is_logged_in():
+			sesh_id = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
+			time_remaining = load_session(sesh_id)
+			return str(time_remaining)
 							
 	@cherrypy.expose
 	def files(self, *args, **kwargs):
@@ -250,8 +263,16 @@ class Root(object):
 				
 				elif cherrypy.request.method == "POST":
 					# ge the target file and write the post contents to it
+					try:
+						os.mkdir(os.path.dirname(target_path))
+					except:
+						pass
+					
 					t = open(target_path, "w")
-					t.write(kwargs["data"])
+					if "data" in kwargs:
+						t.write(kwargs["data"])
+					else:
+						t.write("// Auto generated file by sailboat")
 					t.close()
 					
 					return "Wrote contents of [data] to " + target_path

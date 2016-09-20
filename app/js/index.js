@@ -2,6 +2,8 @@ var editor;
 var showingPreScreen = true;
 var loadedFile = null;
 var midLoad = false;
+var time;
+var lastSeconds;
 		
 function postcontents()
 {
@@ -25,6 +27,8 @@ function loadcontents(filename)
 	// set the target contents
 	$.get("/files/"+filename, function(data) {
 		editor.setValue(data);
+		editor.focus();
+		editor.gotoLine(0);
 		
 		loadedFile = filename;
 		
@@ -36,6 +40,29 @@ function loadcontents(filename)
 			showingPreScreen = false;
 		}
 	});
+}
+
+function newfile()
+{
+	var filename = prompt("Enter a new filename:\nMust end with one of the following: .c .h .cpp .hpp").toLowerCase();
+	var failed = true;
+	
+	var endings = [".c", ".h", ".cpp", ".hpp"];
+	for (var x in endings)
+		if (filename.endsWith(endings[x]))
+		{
+			failed = false;
+			break;
+		}
+	
+	if (failed)
+		alert("ERROR: Filename must end in one of the following: .c .h .cpp .hpp");
+	else
+	{
+		$.post("/files/"+filename, function(data) {
+			 refresh_files();
+		});
+	}
 }
 
 function scan(files)
@@ -100,8 +127,46 @@ function onload()
 			loadcontents(path);
 		}
 	 }
+				   
 );
 	
 	// get tinitial app listing
 	refresh_files();
+	
+	// get the time until cookie expires
+	$.get("/time", function(data) {
+		
+		time = Math.floor(data);
+		time += 4*60*60;
+		
+		// update timer every second
+		setInterval(update_time, 1000);
+	});
+}
+
+function update_time()
+{
+	var ctime = Math.floor(new Date() / 1000);
+	var diff = time - ctime;
+//	alert(diff);
+	
+	secondsToString(diff);
+}
+
+function secondsToString(totalSec)
+{
+	var hours = Math.floor(totalSec/3600);
+	var fpart = totalSec/3600 - hours;
+	var minutes = Math.floor(fpart*60);
+	fpart = (fpart*60) - minutes;
+	var seconds = Math.floor(fpart*60);
+	
+	if (lastSeconds == seconds)
+		seconds --;
+	lastSeconds = seconds;
+
+	var result = (hours < 10 ? "0" + hours : hours) + ":" + (minutes < 10 ? "0" + minutes : minutes) + ":" + (seconds  < 10 ? "0" + seconds : seconds);
+	
+	$("#time").html(result);
+
 }
