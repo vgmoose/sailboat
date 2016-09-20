@@ -17,6 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ''' '' '' ''
 
 import datetime, os, base64, shutil, json
+from distutils import dir_util
 
 # controversial imports
 try:
@@ -30,7 +31,10 @@ except ImportError as e:
 # cache for staticy files (including sessions)
 file_cache = {}
 
-pwd = os.getcwd()
+#HOME = "/home/wiiu/sessions/"
+HOME = os.getcwd() + "/sessions/"
+#EASY_LIB_DIR = "/opt/easy_lib/"
+EASY_LIB_DIR = os.getcwd()+"/../easy_lib"
 
 def is_logged_in():
 	if "sesh_id" in cherrypy.request.cookie:
@@ -53,7 +57,7 @@ def expire_if_needed(sid, expiration):
 	# if the current date is past the expiration
 	if datetime.datetime.now() > datetime.datetime.fromtimestamp(expiration):
 		# remove the session by deleting the folder
-		shutil.rmtree("sessions/"+sid)
+		shutil.rmtree(HOME+sid)
 		
 		# invalidate the cache
 		del file_cache[sid]
@@ -66,7 +70,7 @@ def load_session(sid):
 	# try to open an existing session for the given id
 	# (already cached from the contents method)
 	try:
-		return float(contents("sessions/"+sid+"/cookie.txt"))
+		return float(contents(HOME+sid+"/cookie.txt"))
 	except:
 		return None
 	
@@ -109,7 +113,7 @@ def get_directory_structure(rootdir):
 		for cfile in files:
 			# only use proper file endings
 			for ending in [".c", ".h", ".cpp", ".hpp", "makefile"]:
-				if cfile.endswith(ending):
+				if cfile.lower().endswith(ending):
 					valid_files.append(cfile)
 					continue
 
@@ -178,7 +182,7 @@ class Root(object):
 			
 			# write the cookie to a file
 			# TODO: check for collisions
-			homepath = "sessions/"+sesh_id
+			homepath = HOME+sesh_id
 			try:
 				os.mkdir(homepath)
 			except:
@@ -189,6 +193,10 @@ class Root(object):
 			
 			cherrypy.response.cookie["sesh_id"] = sesh_id
 			cherrypy.response.cookie["sesh_id"]["max-age"] = datetime.timedelta(hours=72).total_seconds()
+			
+			if not old_sesh:
+				# if there was no old session, try to copy over easy_lib
+				dir_util.copy_tree(EASY_LIB_DIR, HOME+sesh_id+"/", False, None)
 			
 			#redirect to where ever we want to go on success
 			raise cherrypy.HTTPRedirect("/")
@@ -220,7 +228,7 @@ class Root(object):
 	def files(self, *args, **kwargs):
 		if is_logged_in():
 			sid = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
-			homepath = pwd+"/"+"sessions/"+sid+"/"
+			homepath = HOME+sid+"/"
 			
 			# make sure the target path is in the home directory
 			target_path = ""
@@ -251,7 +259,16 @@ class Root(object):
 						failed = False
 						
 				if failed:
-					raise cherrypy.HTTPError(403)
+					# we're making a folder now
+					try:
+						os.mkdir(target_path)
+					except:
+						pass
+					
+					sassMsg = ""
+					if cherrypy.request.method == "GET":
+						sassMsg = ". If you're confused about why this is happening on a GET, stop poking around my REST!"
+					return "Created folder at " + target_path + sassMsg
 				
 				if cherrypy.request.method == "GET":
 					# get the target file and return it

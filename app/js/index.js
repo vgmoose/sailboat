@@ -11,6 +11,12 @@ function postcontents()
 	var filename = loadedFile;
 	var contents = editor.getValue();
 	
+	if (loadedFile.toLowerCase().endsWith("makefile"))
+	{
+		alert("ERROR: You cannot edit a Makefile.");
+		return;
+	}
+	
 	// post the file contents to the server
 	$.post("/files/"+filename, {"data": contents});
 	
@@ -42,9 +48,21 @@ function loadcontents(filename)
 	});
 }
 
-function newfile()
+function make()
 {
-	var filename = prompt("Enter a new filename:\nMust end with one of the following: .c .h .cpp .hpp").toLowerCase();
+	alert("Will be implemented soon!");
+}
+
+function newfolder()
+{
+	var filename = prompt("Enter a new foldername")
+	$.post("/files/"+filename, function(data) {
+			 refresh_files();
+	});
+}
+
+function is_dir(filename)
+{
 	var failed = true;
 	
 	var endings = [".c", ".h", ".cpp", ".hpp"];
@@ -54,6 +72,15 @@ function newfile()
 			failed = false;
 			break;
 		}
+	
+	return failed;
+}
+
+function newfile()
+{
+	var filename = prompt("Enter a new filename:\nMust end with one of the following: .c .h .cpp .hpp\n\nFor now, to make it inside a folder, specify the path to the folder").toLowerCase();
+	
+	var failed = is_dir(filename);
 	
 	if (failed)
 		alert("ERROR: Filename must end in one of the following: .c .h .cpp .hpp");
@@ -94,6 +121,9 @@ function refresh_files()
 {
 	// get the listing of files for this user
 	var files = $.get("/files", function(data) {
+
+		if (".git" in data)
+			delete data[".git"]
 	
 		// create jstree html for the files that were received
 		console.log(data);
@@ -118,7 +148,7 @@ function onload()
 	
 	$("#files").on("select_node.jstree",
 	 function(evt, data){
-		if (data.node.children.length == 0)
+		if (data.node.children.length == 0 && (!is_dir(data.node.text) || data.node.text.toLowerCase().endsWith("makefile")))
 		{
 			if (midLoad)
 				return;
@@ -162,7 +192,14 @@ function secondsToString(totalSec)
 	var seconds = Math.floor(fpart*60);
 	
 	if (lastSeconds == seconds)
+	{
 		seconds --;
+		if (seconds == -1)
+		{
+			seconds = 59;
+			minutes --;
+		}
+	}
 	lastSeconds = seconds;
 
 	var result = (hours < 10 ? "0" + hours : hours) + ":" + (minutes < 10 ? "0" + minutes : minutes) + ":" + (seconds  < 10 ? "0" + seconds : seconds);
