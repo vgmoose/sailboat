@@ -16,7 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ''' '' '' ''
 
-import datetime, os, base64, shutil
+import datetime, os, base64, shutil, json
 
 # controversial imports
 try:
@@ -93,6 +93,21 @@ except Exception as e:
 	print "[WARNING] Just put the key as the only content directly in the file"
 	print "[WARNING] " + e.message
 	captcha_site = captcha_secret = "none"
+	
+# http://code.activestate.com/recipes/577879-create-a-nested-dictionary-from-oswalk/
+def get_directory_structure(rootdir):
+	"""
+	Creates a nested dictionary that represents the folder structure of rootdir
+	"""
+	dir = {}
+	rootdir = rootdir.rstrip(os.sep)
+	start = rootdir.rfind(os.sep) + 1
+	for path, dirs, files in os.walk(rootdir):
+		folders = path[start:].split(os.sep)
+		subdir = dict.fromkeys(files)
+		parent = reduce(dict.get, folders[:-1], dir)
+		parent[folders[-1]] = subdir
+	return dir
 
 class Root(object):
 	@cherrypy.expose
@@ -184,25 +199,37 @@ class Root(object):
 		if is_logged_in():
 			sid = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
 			homepath = pwd+"/"+"sessions/"+sid+"/"
+			
+			# make sure the target path is in the home directory
+			target_path = ""
 			if len(args) > 0:
-				# make sure the target path is in the home directory
-				target_path = "/".join(args)
-				target_path = os.path.abspath(homepath + target_path)
+				target_path += "/".join(args)
+			else:
+				homepath = homepath[:-1]
 
-				if not target_path.startswith(homepath):
-					# not allowed
-					return cherrypy.HTTPError(403)
+			target_path = os.path.abspath(homepath + target_path)
+			
+			if not target_path.startswith(homepath):
+				# not allowed
+				raise cherrypy.HTTPError(403)
+			
+			if len(args) > 0:
 				
 				# only fetch .c .h .cpp .hpp and Makefile files
 				failed = True
 				lower_path = target_path.lower()
-				for ending in [".c", ".h", ".cpp", ".hpp", "makefile"]:
+				for ending in [".c", ".h", ".cpp", ".hpp"]:
 					if lower_path.endswith(ending):
 						failed = False
 						break
 						
+				# makefiles are allowed for getting only
+				if cherrypy.request.method == "GET":
+					if lower_path.endswith("makefile"):
+						failed = False
+						
 				if failed:
-					return cherrypy.HTTPError(403)
+					raise cherrypy.HTTPError(403)
 				
 				if cherrypy.request.method == "GET":
 					# get the target file and return it
@@ -222,6 +249,9 @@ class Root(object):
 					
 			# no path specified, return json overview
 			else:
-				return "TODO: json overview of files/folders"
+				cherrypy.response.headers['Content-Type'] = "application/json"
+				return json.dumps(get_directory_structure(homepath).values()[0], sort_keys=True, indent=4, separators=(',', ': '))
+			
+		
 
 cherrypy.quickstart(Root(), "", "app.conf")
