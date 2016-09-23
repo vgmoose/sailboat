@@ -76,8 +76,12 @@ function loadcontents(filename, loadFromCache)
 	});
 }
 
-function make()
+function make(forceUnsaved)
 {
+	if (!forceUnsaved)
+		if (!check_for_unsaved())
+			return;
+	
 	swal({   title: "Compiling...",   text: "Please wait! Your project is being built. This may take a while!",   showConfirmButton: false });
 	
 	$.ajax({url:"/make", 
@@ -86,7 +90,7 @@ function make()
 				if (xhr.status == 200)
 		   			swal("Success!", "Your project successfully compiled! Check the sidebar for the executables and build log.", "success");
 				else if (xhr.status == 429)
-					swal("Rate Limited", "Sorry! As of right now, you must wait at least a minute to recompile.", "error");
+					swal("Rate Limited", "Sorry! As of right now, you must wait at least a minute after a compile.", "warning");
 				else if (xhr.status == 422)
 					swal("Compilation Error", "There was an error while trying to build your project. Check the build.log in the sidebar for more details.", "error");
 				else
@@ -156,7 +160,6 @@ function newfile()
 				});
 			}
 
-			
 	});
 	
 }
@@ -188,6 +191,9 @@ function scan(files)
 
 function refresh_files()
 {
+	// get the edited files
+	var unsaved = get_unsaved_files();
+	
 	// get the listing of files for this user
 	var files = $.get("/files", function(data) {
 
@@ -200,6 +206,19 @@ function refresh_files()
 				
 		$("#files").jstree().settings.core.data = html;
 		$("#files").jstree().refresh(true);
+		
+//		// mark the edited files as edited again
+//		for (var x; x<unsaved.length; x++)
+//		{
+//			for (var key in allFiles)
+//			{
+//				if (allFiles.hasOwnProperty(key))
+//				{
+//					if (allFiles[key].loadedNode.text == unsaved[x])
+//						allFiles[key].loadedNode.text += "*";
+//				}
+//			}
+//		}
 
 		
 	});
@@ -300,6 +319,41 @@ function update_time()
 //	alert(diff);
 	
 	secondsToString(diff);
+}
+
+function get_unsaved_files()
+{
+	var unsaved = [];
+	
+	// check if any files need to be saved
+	for (var key in allFiles)
+	{
+		if (allFiles.hasOwnProperty(key))
+		{
+			var loadedNode = allFiles[loadedFile].loadedNode;
+			var name = loadedNode.text;
+			
+			if (name.endsWith("*"))
+			{
+				unsaved.push(name.substring(0, name.length-1));
+			}
+		}
+	}
+							 
+	return unsaved;
+}
+
+function check_for_unsaved()
+{
+	var unsaved = get_unsaved_files();
+	
+	if (unsaved.length > 0)
+	{
+		swal({   title: "Unsaved Files",   text: "You have unsaved files. Are you sure you want to compile without saving them?\n\nThese are the files: "+unsaved,   type: "warning",   showCancelButton: true,   confirmButtonColor: "#0D6B05",   confirmButtonText: "Continue",   closeOnConfirm: false }, function(){ make(true); });
+		return false;
+	}
+	
+	return true;
 }
 
 function secondsToString(totalSec)
