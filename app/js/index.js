@@ -28,7 +28,7 @@ function postcontents()
 	
 	if (loadedFile.toLowerCase().endsWith("makefile"))
 	{
-		alert("ERROR: You cannot edit a Makefile.");
+		swal("Unauthorized", "You cannot edit a Makefile.", "error");
 		return;
 	}
 	
@@ -78,27 +78,46 @@ function loadcontents(filename, loadFromCache)
 
 function make()
 {
-	alert("Compiling may take a while, Hit OK first, and then please wait.");
-	$.get("/make", function(data) {
-		alert(data);
-		refresh_files();
-	});
+	swal({   title: "Compiling...",   text: "Please wait! Your project is being built. This may take a while!",   showConfirmButton: false });
+	
+	$.ajax({url:"/make", 
+			type: "GET",
+			complete: function(xhr) {
+				if (xhr.status == 200)
+		   			swal("Success!", "Your project successfully compiled! Check the sidebar for the executables and build log.", "success");
+				else if (xhr.status == 429)
+					swal("Rate Limited", "Sorry! As of right now, you must wait at least a minute to recompile.", "error");
+				else if (xhr.status == 422)
+					swal("Compilation Error", "There was an error while trying to build your project. Check the build.log in the sidebar for more details.", "error");
+				else
+					swal("Unknown Error", "There was a "+xhr.status+" Error while trying to build your project.", "error");
+
+				refresh_files();
+		   	}});
 }
 
 function clean()
 {
 	$.get("/clean", function(data) {
-		alert(data);
+		swal("Success!", "Your project has been cleaned. Executable and build files are gone from the sidebar.", "success");
 		refresh_files();
 	});
 }
 
 function newfolder()
 {
-	var filename = prompt("Enter a new foldername")
-	$.post("/files/"+filename, function(data) {
+	swal({title:"New Folder", text:"Enter a new folder name/path. It will be created from the root of the project", type:"input", showCancelButton :true, closeOnConfirm: false, inputPlaceholder: "enter directory name"}, function(data) {
+		if (data === false || data === ""){
+			swal.showInputError("Folder name cannot be blank.");
+			return false;
+		}
+		
+		$.post("/files/"+data, function(data2) {
+			swal("Success!", "Folder "+ data+" was successfully created. Check the sidebar.", "success");
 			 refresh_files();
+		});
 	});
+	
 }
 
 function is_dir(filename)
@@ -118,18 +137,28 @@ function is_dir(filename)
 
 function newfile()
 {
-	var filename = prompt("Enter a new filename:\nMust end with one of the following: .c .h .cpp .hpp\n\nFor now, to make it inside a folder, specify the path to the folder").toLowerCase();
+		swal({title:"New File", text:"Enter a new filename.\n\nFor now, to make it inside a folder, specify the path to the folder", type:"input", showCancelButton :true, closeOnConfirm: false, inputPlaceholder: "enter file name"}, function(filename) {
+			if (filename === false || filename === ""){
+				swal.showInputError("Filename cannot be blank.");
+				return false;
+			}
+			var failed = is_dir(filename);
 	
-	var failed = is_dir(filename);
+			if (failed) {
+				swal.showInputError("Filename must end in one of the following: .c .h .cpp .hpp");
+				return false;
+			}
+			else
+			{
+				$.post("/files/"+filename, function(data) {
+					swal("Success!", "File "+ filename+" was successfully created. Check the sidebar.", "success");
+					refresh_files();
+				});
+			}
+
+			
+	});
 	
-	if (failed)
-		alert("ERROR: Filename must end in one of the following: .c .h .cpp .hpp");
-	else
-	{
-		$.post("/files/"+filename, function(data) {
-			 refresh_files();
-		});
-	}
 }
 
 function scan(files)
