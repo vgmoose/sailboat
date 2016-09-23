@@ -37,6 +37,10 @@ HOME = os.getcwd() + "/sessions/"
 #EASY_LIB_DIR = "/opt/easy_lib/"
 EASY_LIB_DIR = os.getcwd()+"/../easy_lib"
 
+# for keeping track of timeouts
+timeouts_short = {}
+timeouts_long = {}
+
 def is_logged_in():
 	if "sesh_id" in cherrypy.request.cookie:
 		# session id exists, make sure it's valid
@@ -66,6 +70,50 @@ def expire_if_needed(sid, expiration):
 		return True
 	
 	return False
+
+def rate_limited_short(sid):
+	# this method times out for 10 retries in 5 seconds
+	if sid in timeouts_short:
+		time1 = timeouts_short[sid][0]
+		if time1 + datetime.timedelta(seconds=5) > datetime.datetime.now():
+			# increase the counter or fail
+			timeouts_short[sid][1] += 1
+			if timeouts_short[sid][1] >= 5:
+				raise cherrypy.HTTPError(429)
+			return True
+		
+	# create an entry and reset the counter 
+	timeouts_short[sid] = [datetime.datetime.now(), 0]
+	
+		
+def rate_limited_long(sid):
+	timeout_period = datetime.timedelta(seconds=60)
+	cur_time = datetime.datetime.now()
+	
+	# get the last time the action was successful for both
+	# this cookie and this IP
+	if sid in timeouts_long:
+		time1 = timeouts_long[sid]
+		if time1 + timeout_period > cur_time:
+			# failed and timed out
+			raise cherrypy.HTTPError(429)
+		
+	if "X-Forwarded-For" in cherrypy.request.headers:
+		remote_ip = cherrypy.request.headers["X-Forwarded-For"]
+
+		if remote_ip in timeouts_long:
+			time2 = timeouts_long[remote_ip]
+			if time2 + timeout_period > cur_time:
+				# failed and timed out
+				raise cherrypy.HTTPError(429)
+				
+		timeouts_long[remote_ip] = cur_time
+		
+	# if we're here, then this client has yet to time out
+	timeouts_long[sid] = cur_time
+	
+	return True
+			
 
 def load_session(sid):
 	# try to open an existing session for the given id
@@ -113,7 +161,7 @@ def get_directory_structure(rootdir):
 		
 		for cfile in files:
 			# only use proper file endings
-			for ending in [".c", ".h", ".cpp", ".hpp", "makefile", ".elf"]:
+			for ending in [".c", ".h", ".cpp", ".hpp", "makefile", ".elf", ".rpx", ".ld"]:
 				if cfile.lower().endswith(ending):
 					valid_files.append(cfile)
 					continue
@@ -211,16 +259,26 @@ class Root(object):
 			
 	@cherrypy.expose
 	def clean(self, *args, **kwargs):
+		if not is_logged_in:
+			raise cherrypy.HTTPError(401)
+		
 		# cd into the target directory
 		sesh_id = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
+		
+		rate_limited_short(sesh_id)
 		
 		output = subprocess.check_output (["make", "clean"], cwd=HOME+sesh_id, stderr=subprocess.STDOUT)
 		return output
 			
 	@cherrypy.expose
 	def make(self, *args, **kwargs):
+		if not is_logged_in:
+			raise cherrypy.HTTPError(401)
+			
 		# cd into the target directory
 		sesh_id = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
+		
+		rate_limited_long(sesh_id)
 		
 		output = subprocess.check_output (["make"], cwd=HOME+sesh_id, stderr=subprocess.STDOUT)
 		return output
@@ -237,15 +295,22 @@ class Root(object):
 	@cherrypy.expose
 	def time(self, *args, **kwargs):
 		if is_logged_in():
+				
 			sesh_id = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
 			time_remaining = load_session(sesh_id)
+			
+			rate_limited_short(sesh_id)
+
 			return str(time_remaining)
 							
 	@cherrypy.expose
 	def files(self, *args, **kwargs):
 		if is_logged_in():
+			
 			sid = os.path.basename(cherrypy.request.cookie["sesh_id"].value)
 			homepath = HOME+sid+"/"
+			
+			rate_limited_short(sid)
 			
 			# make sure the target path is in the home directory
 			target_path = ""
@@ -265,14 +330,14 @@ class Root(object):
 				# only fetch .c .h .cpp .hpp and Makefile files
 				failed = True
 				lower_path = target_path.lower()
-				for ending in [".c", ".h", ".cpp", ".hpp"]:
+				for ending in [".c", ".h", ".cpp", ".hpp", ".ld"]:
 					if lower_path.endswith(ending):
 						failed = False
 						break
 						
 				# makefiles are allowed for getting only
 				if cherrypy.request.method == "GET":
-					if lower_path.endswith("makefile") or lower_path.endswith("elf"):
+					if lower_path.endswith("makefile") or lower_path.endswith(".elf") or lower_path.endswith(".rpx"):
 						failed = False
 						
 				if failed:

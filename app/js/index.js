@@ -4,12 +4,27 @@ var loadedFile = null;
 var midLoad = false;
 var time;
 var lastSeconds;
+
+var allFiles = {};
+
+function updateAllFiles(filename, contents)
+{
+	if (!(filename in allFiles))
+		allFiles[filename] = {};
+		
+	allFiles[filename].origText = contents;
+}
 		
 function postcontents()
 {
 	// get the target filename and contents
 	var filename = loadedFile;
 	var contents = editor.getValue();
+	
+	// update the local cache
+	localStorage[filename] = contents;
+	updateAllFiles(filename, contents);
+	codeUpdateMade();
 	
 	if (loadedFile.toLowerCase().endsWith("makefile"))
 	{
@@ -25,18 +40,31 @@ function postcontents()
 	
 }
 
-function loadcontents(filename)
+function loadcontents(filename, loadFromCache)
 {
-	// get the target filename and contents
-//	var filename = $("#name").val();
+	// if it ends with an asterisk, use the in-memory version
+	if (loadFromCache)
+	{
+				loadedFile = filename;
+		console.log("Loading ", filename, " from cache");
+		editor.session.setValue(allFiles[filename].currentText);
+		editor.focus();
+		editor.gotoLine(0);
+		return;
+	}
 	
 	// set the target contents
 	$.get("/files/"+filename, function(data) {
-		editor.setValue(data);
+		updateAllFiles(filename, data);
+		// clear the session (undo history) and replace it with the new data
+		// TODO: restore a backed up ACE session to allow multiple files to be edited at once
+				loadedFile = filename;
+
+		
+		editor.session.setValue(data);
 		editor.focus();
 		editor.gotoLine(0);
 		
-		loadedFile = filename;
 		
 		if (showingPreScreen)
 		{
@@ -77,7 +105,7 @@ function is_dir(filename)
 {
 	var failed = true;
 	
-	var endings = [".c", ".h", ".cpp", ".hpp"];
+	var endings = [".c", ".h", ".cpp", ".hpp", ".ld"];
 	for (var x in endings)
 		if (filename.endsWith(endings[x]))
 		{
@@ -148,12 +176,46 @@ function refresh_files()
 	});
 }
 
+function codeUpdateMade()
+{
+	if (editor.getValue() == "")
+		return;
+	
+	if (loadedFile in allFiles)
+	{
+		var origText = allFiles[loadedFile].origText;
+		var loadedNode = allFiles[loadedFile].loadedNode;
+	}
+	else
+		return;
+	
+	console.log("Writing ", loadedFile, " from cache");
+	
+	allFiles[loadedFile].currentText = editor.getValue();
+	
+	// mark the file as edited (even if it maybe wasn't...)
+	if (!loadedNode.text.endsWith("*"))
+	{
+		if (origText != editor.getValue())
+			$("#files").jstree('set_text', loadedNode , loadedNode.text + "*" );
+	}
+	else
+	{
+		if (origText == editor.getValue())
+			$("#files").jstree('set_text', loadedNode , loadedNode.text.substring(0, loadedNode.text.length - 1) );
+	}
+}
+
 function onload()
 {
 	// setup the ACE editor
 	editor = ace.edit("editor");
 	editor.setTheme("ace/theme/twilight");
 	editor.session.setMode("ace/mode/c_cpp");
+	editor.getSession().on('change', function() {
+		codeUpdateMade();
+	});
+
 	
 	// setup jstree sidebar
 	$('#files').jstree({ plugins : ["sort","types","wholerow", "state"], "core" : { "themes" : { "name" : "default-dark" } }, "types" : { "file" : { "icon" : "jstree-file" } } });
@@ -161,23 +223,33 @@ function onload()
 	$("#files").on("select_node.jstree",
 	 function(evt, data){
 		
-		if (data.node.text.toLowerCase().endsWith(".elf"))
+		if (data.node.text.toLowerCase().endsWith(".elf") || data.node.text.toLowerCase().endsWith(".rpx"))
 		{
 			// download the elf directly
 			window.location = "/files/" + data.node.text;
+			return;
 		}
 		
-		if (data.node.children.length == 0 && (!is_dir(data.node.text) || data.node.text.toLowerCase().endsWith("makefile")))
+		if (data.node.children.length == 0 && (!is_dir(data.node.text) || data.node.text.toLowerCase().endsWith("makefile") || data.node.text.endsWith("*")))
 		{
 			if (midLoad)
 				return;
-			
+						
 			var path = data.instance.get_path(data.node,'/');
-			loadcontents(path);
+			
+			if (path.endsWith("*"))
+				path = path.substring(0, path.length-1);
+			
+			if (!(path in allFiles))
+				allFiles[path] = {};
+			
+			allFiles[path].loadedNode = data.node;
+			
+			loadcontents(path, data.node.text.endsWith("*"));
 		}
 	 }
 				   
-);
+	);
 	
 	// get tinitial app listing
 	refresh_files();
@@ -186,7 +258,6 @@ function onload()
 	$.get("/time", function(data) {
 		
 		time = Math.floor(data);
-		time += 4*60*60;
 		
 		// update timer every second
 		setInterval(update_time, 1000);
