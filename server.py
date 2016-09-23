@@ -161,7 +161,7 @@ def get_directory_structure(rootdir):
 		
 		for cfile in files:
 			# only use proper file endings
-			for ending in [".c", ".h", ".cpp", ".hpp", "makefile", ".elf", ".rpx", ".ld"]:
+			for ending in [".c", ".h", ".cpp", ".hpp", "makefile", ".elf", ".rpx", ".ld", ".log"]:
 				if cfile.lower().endswith(ending):
 					valid_files.append(cfile)
 					continue
@@ -280,7 +280,21 @@ class Root(object):
 		
 		rate_limited_long(sesh_id)
 		
-		output = subprocess.check_output (["make"], cwd=HOME+sesh_id, stderr=subprocess.STDOUT)
+		errored = False
+		
+		try:
+			output = subprocess.check_output (["make"], cwd=HOME+sesh_id, stderr=subprocess.STDOUT)
+		except subprocess.CalledProcessError as e:
+			output = e.output
+			errored = True
+			
+		fl = open(HOME+sesh_id+"/build.log", "w")
+		fl.write(output);
+		fl.close()
+		
+		if errored:
+			raise cherrypy.HTTPError(422)
+		
 		return output
 	
 	@cherrypy.expose
@@ -337,7 +351,7 @@ class Root(object):
 						
 				# makefiles are allowed for getting only
 				if cherrypy.request.method == "GET":
-					if lower_path.endswith("makefile") or lower_path.endswith(".elf") or lower_path.endswith(".rpx"):
+					if lower_path.endswith("makefile") or lower_path.endswith(".elf") or lower_path.endswith(".rpx") or lower_path.endswith(".log"):
 						failed = False
 						
 				if failed:
@@ -354,7 +368,7 @@ class Root(object):
 				
 				if cherrypy.request.method == "GET":
 					# if we have an elf, return it a special way so that it is downloaded
-					if target_path.lower().endswith(".elf"):
+					if target_path.lower().endswith(".elf") or target_path.lower().endswith(".rpx"):
 						return serve_file(target_path, "application/x-download", "attachment")
 					
 					# get the target file and return it

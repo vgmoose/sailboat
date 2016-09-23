@@ -32,6 +32,12 @@ function postcontents()
 		return;
 	}
 	
+	if (loadedFile.toLowerCase().endsWith(".log"))
+	{
+		swal("Unauthorized", "You cannot edit a build log.", "error");
+		return;
+	}
+	
 	// post the file contents to the server
 	$.post("/files/"+filename, {"data": contents});
 	
@@ -278,7 +284,7 @@ function onload()
 			return;
 		}
 		
-		if (data.node.children.length == 0 && (!is_dir(data.node.text) || data.node.text.toLowerCase().endsWith("makefile") || data.node.text.endsWith("*")))
+		if (data.node.children.length == 0 && (!is_dir(data.node.text) || data.node.text.toLowerCase().endsWith("makefile") || data.node.text.toLowerCase().endsWith(".log")|| data.node.text.endsWith("*")))
 		{
 			if (midLoad)
 				return;
