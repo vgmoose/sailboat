@@ -51,7 +51,7 @@ function loadcontents(filename, loadFromCache)
 	// if it ends with an asterisk, use the in-memory version
 	if (loadFromCache)
 	{
-				loadedFile = filename;
+		loadedFile = filename;
 		console.log("Loading ", filename, " from cache");
 		editor.session.setValue(allFiles[filename].currentText);
 		editor.focus();
@@ -61,10 +61,12 @@ function loadcontents(filename, loadFromCache)
 	
 	// set the target contents
 	$.get("/files/"+filename, function(data) {
+		if (filename.endsWith(".log") || filename.endsWith(".log*"))
+			data = data.replace(new RegExp(getSeshId(), 'gm'), 'build');
 		updateAllFiles(filename, data);
 		// clear the session (undo history) and replace it with the new data
 		// TODO: restore a backed up ACE session to allow multiple files to be edited at once
-				loadedFile = filename;
+		loadedFile = filename;
 
 		
 		editor.session.setValue(data);
@@ -260,6 +262,14 @@ function codeUpdateMade()
 	}
 }
 
+function displaydownload(elfname)
+{
+	$("#editor").hide();
+	$("#preloader").text("Download this file by clicking the download button in the menu bar");
+	$("#preloader").show();
+	showingPreScreen = true;
+}
+
 function onload()
 {
 	// setup the ACE editor
@@ -268,6 +278,17 @@ function onload()
 	editor.session.setMode("ace/mode/c_cpp");
 	editor.getSession().on('change', function() {
 		codeUpdateMade();
+	});
+	
+	$(window).bind('keydown', function(event) {
+		if (event.ctrlKey || event.metaKey) {
+			switch (String.fromCharCode(event.which).toLowerCase()) {
+			case 's':
+				event.preventDefault();
+				postcontents();
+				break;
+			}
+		}
 	});
 
 	
@@ -280,7 +301,7 @@ function onload()
 		if (data.node.text.toLowerCase().endsWith(".elf") || data.node.text.toLowerCase().endsWith(".rpx"))
 		{
 			// download the elf directly
-			window.location = "/files/" + data.node.text;
+			displaydownload(data.node.text);
 			return;
 		}
 		
@@ -385,4 +406,17 @@ function secondsToString(totalSec)
 	
 	$("#time").html(result);
 
+}
+
+function getSeshId()
+{
+	var id = getCookie("sesh_id");
+	return id.replace(new RegExp("\"", "g"), "");
+}
+
+// http://stackoverflow.com/a/15724300
+function getCookie(name) {
+  var value = "; " + document.cookie;
+  var parts = value.split("; " + name + "=");
+  if (parts.length == 2) return parts.pop().split(";").shift();
 }
