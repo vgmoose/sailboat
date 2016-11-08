@@ -265,7 +265,8 @@ function codeUpdateMade()
 function displaydownload(elfname)
 {
 	$("#editor").hide();
-	$("#preloader").text("Download this file by clicking the download button in the menu bar");
+	var target = "/files/" + elfname;
+	$("#preloader").html("Download <a href='"+target+"'>"+elfname+"</a>.<br>It can be executed in HBL.");
 	$("#preloader").show();
 	showingPreScreen = true;
 }
@@ -325,6 +326,10 @@ function onload()
 	 }
 				   
 	);
+	
+	$("#files").bind("select_node.jstree", function (e, data) {
+		return data.instance.toggle_node(data.node);
+	});
 	
 	// get tinitial app listing
 	refresh_files();
@@ -410,7 +415,7 @@ function secondsToString(totalSec)
 
 function getSeshId()
 {
-	var id = getCookie("sesh_id");
+	var id = getCookie("sesh_id").replace(/\+/g, "\\\+");
 	return id.replace(new RegExp("\"", "g"), "");
 }
 
