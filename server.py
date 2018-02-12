@@ -1,6 +1,6 @@
 ''' '' '' ''
 Sailboat - Browser based IDE
-Copyright (C) VGMoose 2016
+Copyright (C) VGMoose 2016 - 2018
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -34,12 +34,20 @@ file_cache = {}
 
 #HOME = "/home/wiiu/sessions/"
 HOME = os.getcwd() + "/sessions/"
-#EASY_LIB_DIR = "/opt/easy_lib/"
-EASY_LIB_DIR = os.getcwd()+"/../easy_lib"
+#TEMPLATE_DIR = "/opt/easy_lib/"
+TEMPLATE_DIR = os.getcwd()+"/../easy_lib"
+
+# try to make sessions folder if it doesn't exist
+try:
+	os.mkdir(HOME)
+except:
+	pass
 
 # for keeping track of timeouts
 timeouts_short = {}
 timeouts_long = {}
+
+no_recaptcha = False
 
 def is_logged_in():
 	if "sesh_id" in cherrypy.request.cookie:
@@ -139,12 +147,16 @@ def contents(filename):
 	
 # get captcha values
 try:
-	captcha_site	= contents(".recaptcha_site")
-	captcha_secret	= contents(".recaptcha_private")
+	config = open("config.json")
+	keys = json.load(config)
+	captcha_site	= keys["recaptcha_site"]
+	captcha_secret	= keys["recaptcha_private"]
+	config.close()
 except Exception as e:
-	print "[WARNING] Couldn't load secret key from the .recaptcha_site/.recaptcha_private file"
-	print "[WARNING] Just put the key as the only content directly in the file"
+	print "[WARNING] Couldn't load secret key from the 'config.json' file"
 	print "[WARNING] " + e.message
+	print "[WARNING] You may continue, but there will be no protection on generating a new session"
+	no_recaptcha = True
 	captcha_site = captcha_secret = "none"
 	
 # http://code.activestate.com/recipes/577879-create-a-nested-dictionary-from-oswalk/
@@ -205,13 +217,9 @@ class Root(object):
 
 		# response is just the RecaptchaResponse container class. You'll need 
 		# to check is_valid and error_code
-		response = captcha.submit(
-			recaptcha_challenge_field,
-			recaptcha_response_field,
-			captcha_secret,
-			cherrypy.request.headers["Remote-Addr"],)
+		response = captcha.submit(recaptcha_challenge_field, recaptcha_response_field, captcha_secret, cherrypy.request.headers["Remote-Addr"],)
 
-		if response.is_valid:
+		if response.is_valid or no_recaptcha:
 			old_sesh = None
 			
 			# if the user has an existing session, we'll get and renew itt
@@ -244,8 +252,9 @@ class Root(object):
 			cherrypy.response.cookie["sesh_id"]["max-age"] = datetime.timedelta(hours=72).total_seconds()
 			
 			if not old_sesh:
-				# if there was no old session, try to copy over easy_lib
-				dir_util.copy_tree(EASY_LIB_DIR, HOME+sesh_id+"/", False, None)
+				# if there was no old session, try to copy over some template files
+				if os.path.isdir(TEMPLATE_DIR):
+					dir_util.copy_tree(TEMPLATE_DIR, HOME+sesh_id+"/", False, None)
 			
 			#redirect to where ever we want to go on success
 			raise cherrypy.HTTPRedirect("/")
@@ -379,7 +388,7 @@ class Root(object):
 					return result
 				
 				elif cherrypy.request.method == "POST":
-					# ge the target file and write the post contents to it
+					# get the target file and write the post contents to it
 					try:
 						os.mkdir(os.path.dirname(target_path))
 					except:

@@ -6,6 +6,7 @@ The intent of this project is to facilitate allowing potentially untrustworthy u
 ## Setup
 ```
 git clone https://github.com/vgmoose/sailboat.git
+cd sailboat
 pip install -r requirements.txt
 python server.py
 ```

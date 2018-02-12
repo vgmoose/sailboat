@@ -1,6 +1,5 @@
 *.pem
 *.log
 *.DS_Store
-.recaptcha*
 sessions
 .brackets.json
